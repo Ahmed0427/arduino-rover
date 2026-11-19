@@ -13,11 +13,15 @@ public:
     stop();
   }
 
-  void setSpeed(uint8_t s) { speed = s; }
+  void setSpeed(uint8_t s) {
+    speed = s;
+    if (running) analogWrite(en, speed); // apply immediately while moving
+  }
   void forward()  { drive(true); }
   void backward() { drive(false); }
 
   void stop() {
+    running = false;
     digitalWrite(in1, LOW);
     digitalWrite(in2, LOW);
     analogWrite(en, 0);
@@ -25,8 +29,10 @@ public:
 
 private:
   uint8_t in1, in2, en, speed = 150;
+  bool running = false;
 
   void drive(bool a) {
+    running = true;
     digitalWrite(in1, !a ? HIGH : LOW);
     digitalWrite(in2, !a ? LOW : HIGH);
     analogWrite(en, speed);
@@ -40,10 +46,10 @@ public:
   void begin() { left.begin(); right.begin(); }
 
   void setSpeed(uint8_t s) { left.setSpeed(s); right.setSpeed(s - 50); }
-  void forward()           { stop(); delay(100); left.forward(); right.forward(); }
-  void backward()          { stop(); delay(100); left.backward(); right.backward(); }
-  void turnRight()         { stop(); delay(100); left.backward(); right.forward(); }
-  void turnLeft()          { stop(); delay(100); left.forward(); right.backward(); }
+  void forward()           { left.forward(); right.forward(); }
+  void backward()          { left.backward(); right.backward(); }
+  void turnRight()         { left.backward(); right.forward(); }
+  void turnLeft()          { left.forward(); right.backward(); }
   void stop()              { left.stop(); right.stop(); }
 
 private:
@@ -83,36 +89,79 @@ Car car(leftMotor, rightMotor);
 Ultrasonic sonar(2, 3);
 SoftwareSerial bt(9, 4);
 
+enum Motion { STOP, FWD, BACK, LEFT, RIGHT };
+
+const int SPEED_MIN = 100, SPEED_MAX = 255, SPEED_STEP = 25;
+const unsigned long TURN_MS = 200;  // duration of one L/R tap
+const unsigned long PING_MS = 60;   // sonar interval while moving forward
+const long STOP_CM = 20;            // obstacle distance that blocks forward
+
+Motion motion = STOP;
+Motion prevMotion = STOP;           // motion to resume after a turn tap
+unsigned long turnEnd = 0;
+unsigned long lastPing = 0;
+int speed = 150;
+
+bool pathClear() { return sonar.readCm() >= STOP_CM; }
+
+void apply(Motion m) {
+  if (m == FWD && !pathClear()) m = STOP; // never drive into an obstacle
+  motion = m;
+  switch (m) {
+    case FWD:   car.forward();   break;
+    case BACK:  car.backward();  break;
+    case LEFT:  car.turnLeft();  break;
+    case RIGHT: car.turnRight(); break;
+    default:    car.stop();      break;
+  }
+  if (m == FWD) lastPing = millis();
+}
+
+void turn(Motion m) {
+  if (motion != LEFT && motion != RIGHT) prevMotion = motion;
+  apply(m);
+  turnEnd = millis() + TURN_MS; // repeated taps extend the turn
+}
+
+void changeSpeed(int delta) {
+  speed = constrain(speed + delta, SPEED_MIN, SPEED_MAX);
+  car.setSpeed(speed);
+}
+
 void setup() {
   car.begin();
   sonar.begin();
   bt.begin(9600);
 
   // left/right PWM offset to compensate for motor mismatch
-  car.setSpeed(200);
+  car.setSpeed(speed);
 }
 
 void loop() {
   if (bt.available()) {
     char cmd = (char)bt.read();
     switch (cmd) {
-      case 'F':
-        car.forward();
-        break;
-      case 'B':
-        car.backward();
-        break;
-      case 'L':
-        car.turnLeft();
-        break;
-      case 'R':
-        car.turnRight();
-        break;
-      case 'S':
-        car.stop();
-        break;
-      default:
-        break;
+      case 'F': apply(FWD);   break;
+      case 'B': apply(BACK);  break;
+      case 'S': apply(STOP);  break;
+      case 'L': turn(LEFT);   break;
+      case 'R': turn(RIGHT);  break;
+      case '+': changeSpeed(SPEED_STEP);  break;
+      case '-': changeSpeed(-SPEED_STEP); break;
+      default: break;
     }
+  }
+
+  unsigned long now = millis();
+
+  // end of a turn tap: resume what we were doing before it
+  if ((motion == LEFT || motion == RIGHT) && (long)(now - turnEnd) >= 0) {
+    apply(prevMotion);
+  }
+
+  // while moving forward, stop if something is in front
+  if (motion == FWD && now - lastPing >= PING_MS) {
+    lastPing = now;
+    if (!pathClear()) apply(STOP);
   }
 }
