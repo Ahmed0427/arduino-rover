@@ -82,7 +82,7 @@ public:
     delayMicroseconds(10);
     digitalWrite(trig, LOW);
 
-    long d = pulseIn(echo, HIGH, 6000); // ~1 m max, keeps loop fast
+    long d = pulseIn(echo, HIGH, 25000);
     if (d == 0) return 999; // nothing in range
     return d * 0.034 / 2;
   }
@@ -102,8 +102,8 @@ enum Motion { STOP, FWD, BACK, LEFT, RIGHT };
 
 const int SPEED_MIN = 100, SPEED_MAX = 255, SPEED_STEP = 25;
 const unsigned long TURN_MS = 200;  // duration of one L/R tap
-const unsigned long PING_MS = 60;   // sonar interval while moving forward
-const long STOP_CM = 30;            // obstacle distance that blocks forward
+const unsigned long PING_MS = 20;   // sonar interval while moving forward
+const long STOP_CM = 12;            // obstacle distance that blocks forward
 
 Motion motion = STOP;
 Motion prevMotion = STOP;           // motion to resume after a turn tap
@@ -111,14 +111,9 @@ unsigned long turnEnd = 0;
 unsigned long lastPing = 0;
 int speed = 150;
 
-// median of 3 readings, so one noisy echo can't hide or fake an obstacle
-bool pathClear() {
-  long a = sonar.readCm(); delayMicroseconds(500);
-  long b = sonar.readCm(); delayMicroseconds(500);
-  long c = sonar.readCm();
-  long m = max(min(a, b), min(max(a, b), c));
-  return m >= STOP_CM;
-}
+// one ping per check: the HC-SR04 stays busy ~40 ms after a miss,
+// so back-to-back pings return garbage
+bool pathClear() { return sonar.readCm() >= STOP_CM; }
 
 void apply(Motion m) {
   if (m == FWD && !pathClear()) m = STOP; // never drive into an obstacle
