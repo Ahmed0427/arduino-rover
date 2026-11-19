@@ -103,6 +103,7 @@ enum Motion { STOP, FWD, BACK, LEFT, RIGHT };
 const int SPEED_MIN = 100, SPEED_MAX = 255, SPEED_STEP = 25;
 const unsigned long TURN_MS = 200;  // duration of one L/R tap
 const unsigned long PING_MS = 20;   // sonar interval while moving forward
+const bool USE_SONAR = false;      // obstacle stop disabled for now
 const long STOP_CM = 12;            // obstacle distance that blocks forward
 
 Motion motion = STOP;
@@ -116,7 +117,7 @@ int speed = 150;
 bool pathClear() { return sonar.readCm() >= STOP_CM; }
 
 void apply(Motion m) {
-  if (m == FWD && !pathClear()) m = STOP; // never drive into an obstacle
+  if (USE_SONAR && m == FWD && !pathClear()) m = STOP; // never drive into an obstacle
   motion = m;
   switch (m) {
     case FWD:   car.forward();   break;
@@ -171,7 +172,7 @@ void loop() {
   }
 
   // while moving forward, stop if something is in front
-  if (motion == FWD && now - lastPing >= PING_MS) {
+  if (USE_SONAR && motion == FWD && now - lastPing >= PING_MS) {
     lastPing = now;
     if (!pathClear()) { car.brake(); motion = STOP; }
   }

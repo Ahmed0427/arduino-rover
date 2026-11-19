@@ -7,7 +7,7 @@ Small 2-wheel Arduino car controlled over Bluetooth.
 - Arduino Uno
 - L298N motor driver + 2 DC motors
 - HC-05/HC-06 bluetooth module
-- HC-SR04 ultrasonic sensor (stops the car before obstacles)
+- HC-SR04 ultrasonic sensor (obstacle stop disabled for now, see `USE_SONAR`)
 
 ## Pins
 
@@ -33,7 +33,7 @@ Port is `/dev/ttyACM0`, change it in the Makefile if yours is different.
 
 Send these over bluetooth (9600 baud):
 
-- `F` forward (ignored if something is closer than 12 cm)
+- `F` forward
 - `B` backward
 - `L` left tap: turns for 200 ms, then resumes the previous motion
 - `R` right tap: same as `L`, other way
@@ -44,6 +44,5 @@ Send these over bluetooth (9600 baud):
 ## Behaviour
 
 - Tap `L`/`R` repeatedly to turn further. A tap while driving forward works as a steering correction.
-- While moving forward the sonar is checked every 20 ms and the car stops if an obstacle is within 12 cm and brakes (not coasts). `B`, `L` and `R` still work so you can back out.
 - The right motor always runs 50 PWM below the left to compensate for motor mismatch. Speed starts at 150.
-- Tunables (`TURN_MS`, `STOP_CM`, `SPEED_*`) are constants at the top of the control section in `Rover.ino`.
+- Tunables (`TURN_MS`, `SPEED_*`, `USE_SONAR`, `STOP_CM`) are constants at the top of the control section in `Rover.ino`.
